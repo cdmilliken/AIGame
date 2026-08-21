@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>THE JOB — a Gotham stealth-horror</title>
+<style>
+  :root{
+    --ink:#07080b;
+    --void:#0d0f14;
+    --fog:#1b1e27;
+    --bone:#cfd3dc;
+    --blood:#8f1d1d;
+    --blood-bright:#d1352f;
+    --gold:#b6924a;
+    --signal:#3fa796;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; height:100%;
+    background:var(--ink);
+    font-family: 'Georgia', 'Times New Roman', serif;
+    color:var(--bone);
+    overflow:hidden;
+    user-select:none;
+  }
+  #stage{
+    position:relative;
+    width:100vw; height:100vh;
+    display:flex; align-items:center; justify-content:center;
+    background:
+      radial-gradient(ellipse at 50% 0%, #14161d 0%, var(--ink) 60%);
+  }
+  #frame{
+    position:relative;
+    border:1px solid #2a2d38;
+    box-shadow: 0 0 0 6px #050609, 0 0 60px rgba(0,0,0,0.8), inset 0 0 80px rgba(0,0,0,0.6);
+  }
+  canvas{ display:block; background:#000; }
+
+  #hud{
+    position:absolute; top:0; left:0; right:0;
+    display:flex; justify-content:space-between; align-items:flex-start;
+    padding:14px 18px;
+    pointer-events:none;
+    font-variant:small-caps;
+    letter-spacing:1px;
+  }
+  .hud-block{
+    background:rgba(6,7,10,0.55);
+    border:1px solid #2c2f3a;
+    padding:8px 12px;
+    min-width:190px;
+  }
+  .hud-label{
+    font-size:10px; letter-spacing:3px; color:#8a8f9e; text-transform:uppercase;
+  }
+  .hud-value{ font-size:15px; color:var(--bone); margin-top:2px; }
+  #fearWrap{ width:180px; height:8px; background:#1a1c23; margin-top:6px; border:1px solid #33313a; }
+  #fearBar{ height:100%; width:0%; background:linear-gradient(90deg,var(--blood),var(--blood-bright)); transition:width .15s linear; }
+  #lootDots span{
+    display:inline-block; width:9px; height:9px; margin-right:5px;
+    border-radius:50%; background:#2a2d38; border:1px solid #55483020;
+  }
+  #lootDots span.got{ background:var(--gold); box-shadow:0 0 6px var(--gold); }
+
+  #title-card, #end-card{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:rgba(4,5,7,0.92);
+    text-align:center; padding:30px;
+    z-index:10;
+  }
+  #title-card h1, #end-card h1{
+    font-size:44px; letter-spacing:4px; margin:0 0 6px 0;
+    color:var(--bone);
+    text-shadow: 0 0 18px rgba(200,30,30,0.35);
+  }
+  #title-card h1 span, #end-card h1 span{ color:var(--blood-bright); }
+  #title-card p, #end-card p{
+    max-width:480px; color:#9aa0ad; line-height:1.6; font-size:14px;
+  }
+  .rule{ width:120px; height:1px; background:#3a3d47; margin:16px 0; }
+  button{
+    font-family:inherit; font-variant:small-caps; letter-spacing:2px;
+    background:transparent; color:var(--bone);
+    border:1px solid #55565f; padding:10px 26px; margin-top:18px;
+    cursor:pointer; font-size:14px;
+  }
+  button:hover{ background:var(--blood); border-color:var(--blood-bright); color:#fff; }
+
+  #controls-note{
+    position:absolute; bottom:10px; left:0; right:0; text-align:center;
+    font-size:11px; letter-spacing:2px; color:#585c68; pointer-events:none;
+    font-variant:small-caps;
+  }
+
+  .shake{ animation: shakeAnim 0.35s; }
+  @keyframes shakeAnim{
+    0%{ transform: translate(0,0); }
+    20%{ transform: translate(-6px,3px); }
+    40%{ transform: translate(5px,-4px); }
+    60%{ transform: translate(-4px,-2px); }
+    80%{ transform: translate(3px,4px); }
+    100%{ transform: translate(0,0); }
+  }
+
+  #flash{
+    position:absolute; inset:0; background:var(--blood-bright);
+    opacity:0; pointer-events:none; mix-blend-mode:screen;
+  }
+
+  #whisper{
+    position:absolute; left:50%; bottom:16%; transform:translateX(-50%);
+    font-style:italic; color:var(--blood-bright); font-size:15px;
+    letter-spacing:1px; opacity:0; pointer-events:none;
+    text-shadow:0 0 10px rgba(200,20,20,0.6);
+    transition:opacity .4s ease;
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="frame">
+    <canvas id="game" width="900" height="560"></canvas>
+
+    <div id="hud">
+      <div class="hud-block">
+        <div class="hud-label">Nerve</div>
+        <div id="fearWrap"><div id="fearBar"></div></div>
+      </div>
+      <div class="hud-block" style="text-align:right;">
+        <div class="hud-label">Take</div>
+        <div id="lootDots"></div>
+      </div>
+    </div>
+
+    <div id="whisper"></div>
+    <div id="flash"></div>
+
+    <div id="title-card">
+      <h1>THE <span>JOB</span></h1>
+      <div class="rule"></div>
+      <p>
+        You're not the hero of this story. You're the crew Falcone sent into a Wayne Enterprises
+        annex to lift five crates before the night's out. Word on the street is he's out there too —
+        the thing in the dark that isn't a cop and doesn't stop.
+        <br><br>
+        Stay off the noise. Stay out of the light. Get the take, get to the door.
+        <br><br>
+        If your nerve breaks, you freeze. If he sees you long enough, he catches you. Either way, the job's over.
+      </p>
+      <button id="startBtn">Take the job</button>
+    </div>
+
+    <div id="end-card" style="display:none;">
+      <h1 id="endTitle">— </h1>
+      <p id="endText"></p>
+      <button id="retryBtn">Run it back</button>
+    </div>
+
+    <div id="controls-note">WASD / ARROWS — MOVE &nbsp;·&nbsp; SHIFT — HOLD TO CREEP</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  const overlay = document.createElement('canvas');
+  overlay.width = W; overlay.height = H;
+  const octx = overlay.getContext('2d');
+
+  const fearBar = document.getElementById('fearBar');
+  const lootDots = document.getElementById('lootDots');
+  const frame = document.getElementById('frame');
+  const flashEl = document.getElementById('flash');
+  const whisperEl = document.getElementById('whisper');
+  const titleCard = document.getElementById('title-card');
+  const endCard = document.getElementById('end-card');
+  const endTitle = document.getElementById('endTitle');
+  const endText = document.getElementById('endText');
+
+  // ---------- LEVEL ----------
+  const WALLS = [
+    // border
+    {x:0,y:0,w:W,h:16},{x:0,y:H-16,w:W,h:16},{x:0,y:0,w:16,h:H},{x:W-16,y:0,w:16,h:H},
+    // crate storage room top-left
+    {x:120,y:16,w:20,h:150},
+    {x:120,y:16,w:220,h:20},
+    // corridor dividers
+    {x:340,y:16,w:20,h:230},
+    {x:340,y:230,w:220,h:20},
+    // central office block
+    {x:420,y:120,w:160,h:20},
+    {x:420,y:120,w:20,h:160},
+    {x:420,y:260,w:180,h:20},
+    // right wing walls
+    {x:640,y:16,w:20,h:260},
+    {x:640,y:260,w:180,h:20},
+    // lower maze
+    {x:180,y:340,w:20,h:170},
+    {x:180,y:340,w:260,h:20},
+    {x:440,y:340,w:20,h:130},
+    {x:560,y:400,w:220,h:20},
+    {x:760,y:280,w:20,h:200},
+    {x:60,y:420,w:120,h:20},
+  ];
+
+  const SHADOWS = [
+    {x:20,y:20,w:100,h:130},
+    {x:150,y:250,w:170,h:70},
+    {x:440,y:20,w:180,h:80},
+    {x:660,y:300,w:220,h:180},
+    {x:20,y:440,w:150,h:100},
+    {x:480,y:450,w:150,h:90},
+  ];
+
+  const LOOT = [
+    {x:60,y:70,r:8,got:false},
+    {x:520,y:60,r:8,got:false},
+    {x:740,y:200,r:8,got:false},
+    {x:260,y:420,r:8,got:false},
+    {x:700,y:470,r:8,got:false},
+  ];
+
+  const EXIT = {x:20,y:480,w:60,h:60};
+
+  const BATMAN_PATH = [
+    {x:500,y:200},
+    {x:750,y:150},
+    {x:750,y:420},
+    {x:500,y:470},
+    {x:250,y:400},
+    {x:250,y:150},
+  ];
+
+  // ---------- STATE ----------
+  let keys = {};
+  let player, bat, fear, lootTaken, gameOver, running, timeAlive, whisperTimer, alertMemory;
+
+  function resetState(){
+    player = {x:70,y:470,r:9,speed:2.6,sneakSpeed:1.4};
+    bat = {
+      x:BATMAN_PATH[0].x, y:BATMAN_PATH[0].y, r:13,
+      speed:1.55, chaseSpeed:3.0, investigateSpeed:2.1,
+      dir:0, state:'patrol', pathIndex:0,
+      alertPos:null, lastSeenTimer:0, visionRange:190, visionAngle:Math.PI/2.6,
+    };
+    fear = 0;
+    lootTaken = 0;
+    gameOver = false;
+    running = false;
+    timeAlive = 0;
+    whisperTimer = 0;
+    alertMemory = 0;
+    LOOT.forEach(l=>l.got=false);
+    updateLootDots();
+    fearBar.style.width = '0%';
+  }
+  resetState();
+
+  function updateLootDots(){
+    lootDots.innerHTML = LOOT.map(l=>`<span class="${l.got?'got':''}"></span>`).join('');
+  }
+
+  window.addEventListener('keydown', e=>{
+    keys[e.key.toLowerCase()] = true;
+    if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(e.key.toLowerCase())) e.preventDefault();
+  });
+  window.addEventListener('keyup', e=>{ keys[e.key.toLowerCase()] = false; });
+
+  // ---------- HELPERS ----------
+  function rectsOverlap(a,b){
+    return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
+  }
+  function circleRectOverlap(cx,cy,cr,rect){
+    const nx = Math.max(rect.x, Math.min(cx, rect.x+rect.w));
+    const ny = Math.max(rect.y, Math.min(cy, rect.y+rect.h));
+    const dx = cx-nx, dy = cy-ny;
+    return (dx*dx+dy*dy) < cr*cr;
+  }
+  function pointInRect(px,py,rect){
+    return px>=rect.x && px<=rect.x+rect.w && py>=rect.y && py<=rect.y+rect.h;
+  }
+  function normAngle(a){
+    while(a > Math.PI) a -= Math.PI*2;
+    while(a < -Math.PI) a += Math.PI*2;
+    return a;
+  }
+  function inShadow(x,y){
+    return SHADOWS.some(s=>pointInRect(x,y,s));
+  }
+  function lineBlocked(x0,y0,x1,y1){
+    const steps = 24;
+    for(let i=0;i<=steps;i++){
+      const t = i/steps;
+      const px = x0+(x1-x0)*t, py = y0+(y1-y0)*t;
+      for(const w of WALLS){
+        if(pointInRect(px,py,w)) return true;
+      }
+    }
+    return false;
+  }
+
+  function moveWithCollision(entity, dx, dy){
+    let nx = entity.x + dx;
+    let blocked = WALLS.some(w=>circleRectOverlap(nx, entity.y, entity.r, w));
+    if(!blocked) entity.x = nx;
+    let ny = entity.y + dy;
+    blocked = WALLS.some(w=>circleRectOverlap(entity.x, ny, entity.r, w));
+    if(!blocked) entity.y = ny;
+  }
+
+  // ---------- PLAYER ----------
+  function updatePlayer(){
+    let dx=0, dy=0;
+    if(keys['w']||keys['arrowup']) dy -= 1;
+    if(keys['s']||keys['arrowdown']) dy += 1;
+    if(keys['a']||keys['arrowleft']) dx -= 1;
+    if(keys['d']||keys['arrowright']) dx += 1;
+    const sneaking = !!keys['shift'];
+    if(dx!==0 || dy!==0){
+      const len = Math.hypot(dx,dy);
+      dx/=len; dy/=len;
+      const spd = sneaking ? player.sneakSpeed : player.speed;
+      moveWithCollision(player, dx*spd, dy*spd);
+    }
+    player.moving = (dx!==0||dy!==0);
+    player.sneaking = sneaking;
+  }
+
+  // ---------- BATMAN AI ----------
+  function updateBatman(dt){
+    const shadowed = inShadow(player.x, player.y);
+    const rangeMult = shadowed ? 0.42 : 1.0;
+    const seesPlayer = canSeePlayer(rangeMult);
+
+    const noiseRadius = player.sneaking ? 55 : (player.moving ? 155 : 30);
+    const distToPlayer = Math.hypot(player.x-bat.x, player.y-bat.y);
+
+    if(seesPlayer){
+      bat.state = 'chase';
+      bat.lastSeenTimer = 1.1;
+    } else if(bat.state==='chase'){
+      bat.lastSeenTimer -= dt;
+      if(bat.lastSeenTimer<=0){
+        bat.state='alert';
+        bat.alertPos = {x:player.x,y:player.y};
+      }
+    } else if(bat.state!=='alert' && distToPlayer < noiseRadius && !lineBlocked(bat.x,bat.y,player.x,player.y)){
+      bat.state='alert';
+      bat.alertPos = {x:player.x,y:player.y};
+    }
+
+    if(bat.state==='patrol'){
+      const target = BATMAN_PATH[bat.pathIndex];
+      stepToward(target, bat.speed);
+      if(Math.hypot(target.x-bat.x,target.y-bat.y) < 12){
+        bat.pathIndex = (bat.pathIndex+1)%BATMAN_PATH.length;
+      }
+    } else if(bat.state==='alert'){
+      stepToward(bat.alertPos, bat.investigateSpeed);
+      if(Math.hypot(bat.alertPos.x-bat.x,bat.alertPos.y-bat.y) < 14){
+        bat.state='patrol';
+      }
+    } else if(bat.state==='chase'){
+      stepToward({x:player.x,y:player.y}, bat.chaseSpeed);
+    }
+
+    // fear meter
+    if(bat.state==='chase'){
+      fear += 0.62;
+      if(!alertMemory){ triggerWhisper("HE'S SEEN YOU"); alertMemory=1; }
+    } else if(bat.state==='alert'){
+      fear += 0.10;
+      if(!alertMemory){ triggerWhisper("something moved..."); alertMemory=1; }
+    } else {
+      fear -= 0.14;
+      alertMemory=0;
+    }
+    fear = Math.max(0, Math.min(100, fear));
+    fearBar.style.width = fear+'%';
+
+    // jump scare shake
+    if(distToPlayer < 90 && seesPlayer){
+      frame.classList.add('shake');
+      flashEl.style.opacity = Math.min(0.28, (90-distToPlayer)/90*0.28);
+      setTimeout(()=>frame.classList.remove('shake'), 120);
+    } else {
+      flashEl.style.opacity = Math.max(0, parseFloat(flashEl.style.opacity||0) - 0.02);
+    }
+
+    if(distToPlayer < bat.r+player.r-2){
+      endGame(false,'caught');
+    }
+    if(fear>=100){
+      endGame(false,'panic');
+    }
+  }
+
+  function stepToward(target, speed){
+    const dx = target.x-bat.x, dy = target.y-bat.y;
+    const len = Math.hypot(dx,dy);
+    if(len<0.001) return;
+    bat.dir = Math.atan2(dy,dx);
+    const stepX = (dx/len)*speed, stepY=(dy/len)*speed;
+    moveWithCollision(bat, stepX, stepY);
+  }
+
+  function canSeePlayer(rangeMult){
+    const dx = player.x-bat.x, dy = player.y-bat.y;
+    const dist = Math.hypot(dx,dy);
+    const range = bat.visionRange * rangeMult;
+    if(dist > range) return false;
+    const angleTo = Math.atan2(dy,dx);
+    const diff = Math.abs(normAngle(angleTo - bat.dir));
+    if(diff > bat.visionAngle/2) return false;
+    if(lineBlocked(bat.x,bat.y,player.x,player.y)) return false;
+    return true;
+  }
+
+  let whisperFadeTimeout=null;
+  function triggerWhisper(text){
+    whisperEl.textContent = text;
+    whisperEl.style.opacity = 1;
+    clearTimeout(whisperFadeTimeout);
+    whisperFadeTimeout = setTimeout(()=>{ whisperEl.style.opacity=0; }, 1400);
+  }
+
+  // ---------- LOOT / EXIT ----------
+  function updatePickups(){
+    LOOT.forEach(l=>{
+      if(!l.got && Math.hypot(l.x-player.x,l.y-player.y) < l.r+player.r+4){
+        l.got = true; lootTaken++;
+        updateLootDots();
+        triggerWhisper('taken.');
+      }
+    });
+    if(lootTaken>=LOOT.length && circleRectOverlap(player.x,player.y,player.r,EXIT)){
+      endGame(true,'escaped');
+    }
+  }
+
+  // ---------- RENDER ----------
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle = '#0a0b0e';
+    ctx.fillRect(0,0,W,H);
+
+    // floor grime texture (subtle)
+    ctx.fillStyle = 'rgba(255,255,255,0.015)';
+    for(let i=0;i<40;i++){
+      ctx.fillRect((i*173)%W, (i*97)%H, 2,2);
+    }
+
+    // shadows zones
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    SHADOWS.forEach(s=>ctx.fillRect(s.x,s.y,s.w,s.h));
+
+    // walls
+    ctx.fillStyle = '#23262f';
+    ctx.strokeStyle = '#3a3e4a';
+    WALLS.forEach(w=>{
+      ctx.fillRect(w.x,w.y,w.w,w.h);
+      ctx.strokeRect(w.x+0.5,w.y+0.5,w.w-1,w.h-1);
+    });
+
+    // exit door
+    ctx.fillStyle = lootTaken>=LOOT.length ? 'rgba(63,167,150,0.35)' : 'rgba(143,29,29,0.35)';
+    ctx.fillRect(EXIT.x,EXIT.y,EXIT.w,EXIT.h);
+    ctx.strokeStyle = lootTaken>=LOOT.length ? '#3fa796' : '#8f1d1d';
+    ctx.lineWidth=2;
+    ctx.strokeRect(EXIT.x,EXIT.y,EXIT.w,EXIT.h);
+    ctx.font = '9px Georgia';
+    ctx.fillStyle = '#cfd3dc';
+    ctx.fillText(lootTaken>=LOOT.length ? 'OUT' : 'LOCKED', EXIT.x+8, EXIT.y+34);
+
+    // loot
+    LOOT.forEach(l=>{
+      if(l.got) return;
+      ctx.beginPath();
+      ctx.arc(l.x,l.y,l.r,0,Math.PI*2);
+      ctx.fillStyle = '#b6924a';
+      ctx.shadowColor = '#b6924a';
+      ctx.shadowBlur = 10;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    });
+
+    // batman vision cone (subtle, only visible if close enough conceptually - keep for tension)
+    ctx.save();
+    ctx.translate(bat.x,bat.y);
+    ctx.rotate(bat.dir);
+    ctx.beginPath();
+    ctx.moveTo(0,0);
+    const shadowed = inShadow(player.x,player.y);
+    const range = bat.visionRange*(shadowed?0.42:1.0);
+    ctx.arc(0,0, range, -bat.visionAngle/2, bat.visionAngle/2);
+    ctx.closePath();
+    ctx.fillStyle = bat.state==='chase' ? 'rgba(209,53,47,0.10)' : 'rgba(140,40,40,0.05)';
+    ctx.fill();
+    ctx.restore();
+
+    // batman
+    ctx.save();
+    ctx.translate(bat.x,bat.y);
+    ctx.rotate(bat.dir);
+    ctx.beginPath();
+    ctx.moveTo(-14,10); ctx.quadraticCurveTo(-4,-6,0,-14);
+    ctx.quadraticCurveTo(4,-6,14,10);
+    ctx.quadraticCurveTo(4,4,0,10);
+    ctx.quadraticCurveTo(-4,4,-14,10);
+    ctx.closePath();
+    ctx.fillStyle = '#050505';
+    ctx.shadowColor = bat.state==='chase' ? '#d1352f' : '#000';
+    ctx.shadowBlur = bat.state==='chase' ? 18 : 4;
+    ctx.fill();
+    ctx.shadowBlur=0;
+    // eyes
+    const eyeGlow = bat.state==='chase';
+    ctx.fillStyle = eyeGlow ? '#ffe86b' : '#8a8020';
+    ctx.beginPath(); ctx.ellipse(-3,-2,2,1,0.3,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(4,-2,2,1,-0.3,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+
+    // player
+    ctx.beginPath();
+    ctx.arc(player.x,player.y,player.r,0,Math.PI*2);
+    ctx.fillStyle = player.sneaking ? '#5a6270' : '#8b93a3';
+    ctx.fill();
+    ctx.strokeStyle = '#20222a';
+    ctx.stroke();
+
+    // ---- lighting overlay ----
+    octx.clearRect(0,0,W,H);
+    octx.fillStyle = 'rgba(2,2,4,0.93)';
+    octx.fillRect(0,0,W,H);
+    octx.globalCompositeOperation = 'destination-out';
+    const lightR = player.sneaking ? 95 : 140;
+    const grad = octx.createRadialGradient(player.x,player.y,10,player.x,player.y,lightR);
+    grad.addColorStop(0,'rgba(255,255,255,1)');
+    grad.addColorStop(0.6,'rgba(255,255,255,0.55)');
+    grad.addColorStop(1,'rgba(255,255,255,0)');
+    octx.fillStyle = grad;
+    octx.beginPath();
+    octx.arc(player.x,player.y,lightR,0,Math.PI*2);
+    octx.fill();
+    // faint glow around batman's eyes when chasing, bleeds through dark
+    octx.globalCompositeOperation = 'source-over';
+    if(bat.state==='chase'){
+      const bgrad = octx.createRadialGradient(bat.x,bat.y,2,bat.x,bat.y,60);
+      bgrad.addColorStop(0,'rgba(209,53,47,0.35)');
+      bgrad.addColorStop(1,'rgba(209,53,47,0)');
+      octx.fillStyle = bgrad;
+      octx.beginPath();
+      octx.arc(bat.x,bat.y,60,0,Math.PI*2);
+      octx.fill();
+    }
+    ctx.drawImage(overlay,0,0);
+
+    // vignette
+    const vg = ctx.createRadialGradient(W/2,H/2,H*0.25,W/2,H/2,H*0.75);
+    vg.addColorStop(0,'rgba(0,0,0,0)');
+    vg.addColorStop(1,'rgba(0,0,0,0.55)');
+    ctx.fillStyle = vg;
+    ctx.fillRect(0,0,W,H);
+  }
+
+  // ---------- LOOP ----------
+  let lastTime = null;
+  function loop(ts){
+    if(!running){ return; }
+    if(lastTime===null) lastTime = ts;
+    const dt = Math.min(0.05, (ts-lastTime)/1000);
+    lastTime = ts;
+    timeAlive += dt;
+
+    updatePlayer();
+    updateBatman(dt);
+    updatePickups();
+    draw();
+
+    if(!gameOver) requestAnimationFrame(loop);
+  }
+
+  function endGame(won, reason){
+    if(gameOver) return;
+    gameOver = true;
+    running = false;
+    setTimeout(()=>{
+      endCard.style.display='flex';
+      if(won){
+        endTitle.innerHTML = 'CLEAN <span>GETAWAY</span>';
+        endText.textContent = `Five crates lighter, Wayne Enterprises won't notice till Monday. You made it out in ${timeAlive.toFixed(1)}s without him ever laying a glove on you. Falcone will hear about this.`;
+      } else if(reason==='caught'){
+        endTitle.innerHTML = 'HE <span>FOUND YOU</span>';
+        endText.textContent = `One second he was a rumor. The next, he wasn't. GCPD will find you zip-tied to a lamppost outside the 14th precinct by morning — that's if you're lucky.`;
+      } else {
+        endTitle.innerHTML = 'YOUR <span>NERVE</span> BROKE';
+        endText.textContent = `Your hands stopped working. Your legs forgot the door. Whether or not he was ever really that close doesn't matter anymore — the job's over, and so are you.`;
+      }
+    }, 250);
+  }
+
+  function startGame(){
+    resetState();
+    titleCard.style.display='none';
+    endCard.style.display='none';
+    running = true;
+    lastTime = null;
+    requestAnimationFrame(loop);
+  }
+
+  document.getElementById('startBtn').addEventListener('click', startGame);
+  document.getElementById('retryBtn').addEventListener('click', startGame);
+
+  draw();
+})();
+</script>
+</body>
+</html>
